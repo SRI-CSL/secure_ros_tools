@@ -1,0 +1,105 @@
+#!/usr/bin/env python
+# Software License Agreement (BSD License)
+#
+# Copyright (c) 2017, SRI International
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+#
+#  * Redistributions of source code must retain the above copyright
+#    notice, this list of conditions and the following disclaimer.
+#  * Redistributions in binary form must reproduce the above
+#    copyright notice, this list of conditions and the following
+#    disclaimer in the documentation and/or other materials provided
+#    with the distribution.
+#  * Neither the name of Willow Garage, Inc. nor the names of its
+#    contributors may be used to endorse or promote products derived
+#    from this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+# "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+# LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+# FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+# COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+# INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+# BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+# ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
+
+from ipsec_tools import make_conf, make_keys, copy_public_keys
+import argparse
+import yaml
+import json
+import os
+import logging 
+import tarfile
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser( description = "Tool to create IPSec configuration files" )
+    parser.add_argument( "--input_file", "-i", metavar = "INPUT_FILE", default = "", help = "hostname:ip_address dict" )
+    parser.add_argument( "--ip_addresses_dict", "-d", metavar = "IP_ADDRESSES_DICT", default = "", help = "hostname:ip_address dict as a JSON string" )
+    parser.add_argument( "--prefix", metavar = "OUTPUT_PREFIX", default="output", help = "Output folder prefix" )
+    parser.add_argument( "--verbosity", "-v", action="count", default = 0, help = "Verbosity level" )
+    args = parser.parse_args()
+
+    # set logging 
+    log_level = logging.WARN if args.verbosity == 0 else logging.INFO if args.verbosity == 1 else logging.DEBUG
+    logging.basicConfig( level = log_level, format = "[%(levelname)s] %(message)s"  )
+
+    ip_addresses = {}
+    if args.input_file:
+        if os.path.exists( args.input_file ):
+            name, ext = os.path.splitext( args.input_file )
+            with open( args.input_file, "r" ) as handle:
+                if ext.lower() == ".json":
+                    ip_addresses = yaml.load( handle )
+                elif ext.lower() in [".yaml", ".yml"]:
+                    ip_addresses = yaml.load( handle )
+                else:
+                    raise RuntimeError( "%s should have yaml or json extension" % ( args.input_file ) )
+        else:
+            raise RuntimeError( "No such file: %s" % args.input_file )
+    elif args.ip_addresses_dict:
+        ip_addresses = json.loads( args.ip_addresses_dict )
+    else:
+        raise RuntimeError( "You should provide one of the following options: \n"
+                "  --ip_addresses_dict\n"
+                "  --input_file\n"
+                )
+
+    # ip_addresses is a dict of {hostname: ip_address}
+    logging.debug( "IP address list" )
+    for key, val in ip_addresses.items():
+        logging.debug( "- %s: %s" % ( key, val ) )
+
+    # create keys if they don't exist
+    for hostname, ip_address in ip_addresses.items():
+        prefix = os.path.join( args.prefix, hostname )
+        make_keys( hostname, prefix )
+
+        
+    # copy public keys to all machines
+    hostnames = set( ip_addresses.keys() )
+    for hostname in hostnames:
+        prefix = os.path.join( args.prefix, hostname )
+        for hostname2 in hostnames - set( [hostname] ):
+            prefix2 = os.path.join( args.prefix, hostname2 )
+            copy_public_keys( hostname, prefix, prefix2 )
+
+
+    # Writi
+    logging.info( "Writing configuration files to %s" % ( args.prefix ) )
+    for hostname, ip_address in ip_addresses.items():
+        prefix = os.path.join( args.prefix, hostname )
+        make_conf( hostname, ip_addresses, prefix )
+        tarfilename = prefix + ".tgz"
+        logging.info( "Creating %s" % tarfilename )
+        with tarfile.open( tarfilename, "w:gz" ) as handle:
+            handle.add( prefix, arcname = "." )
+
+
