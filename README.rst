@@ -1,7 +1,7 @@
 Secure ROS tools 
 ================
 
-``secure_ros_tools`` contains tools to create configuration files for IPSec for the "Secure ROS" project.
+``secure_ros_tools`` contains tools to create configuration files for IPSec for the "Secure ROS" project. This can be used to configure IPsec in transport mode for any application. Currently only Ubuntu Linux is supported. 
 
 Installation
 ------------ 
@@ -12,7 +12,7 @@ Install ``racoon`` and ``ipsec-tools``. ::
 
 To install the package::
 
-  pip install -e . --user
+  sudo pip install git+https://github.com/SRI-CSL/secure_ros_tools.git
 
 Usage
 -----
@@ -57,5 +57,17 @@ The following files are then created. ::
   output/machine3/etc/racoon/racoon.conf
 
 
+Additionally, a ``tar.gz`` file is created for each machine. ::
+
+  output/machine1.tar.gz
+  output/machine2.tar.gz
+  output/machine3.tar.gz
+
+
+Copy the ``tar.gz`` files to the appropriate machines and untar them into the appropriate folder on the respective machines. 
+
+E.g., on ``machine1``, untar the contents of ``machine1.tgz``. ::
+
+  sudo tar xzf machine1.tgz -C /
 
 
